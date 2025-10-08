@@ -1,10 +1,42 @@
+// === Simulador Médico v3 — HOTFIX de evaluación ===
+// Reemplaza tu archivo JS por este (o pega los cambios).
+// Corrige: respuestas válidas que venían como 'a', 'A)', '1', 'C) texto', o con espacios/Unicode invisibles.
+// Acepta también cuando la columna 'respuesta' contiene literalmente el TEXTO de la opción correcta.
+
 // ===== Util =====
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
-const toast = (m)=>{ const t=$('#toast'); t.textContent=m; t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'),1400); };
+const toast = (m)=>{ const t=$('#toast'); if(!t) return; t.textContent=m; t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'),1400); };
 const dl = (name, content, mime='text/plain')=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([content],{type:mime})); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); };
 
-// CSV robusto
+// Limpia BOM, espacios raros y normaliza
+const clean = (s)=> (s??'')
+  .replace(/\uFEFF/g,'')                         // BOM
+  .replace(/[\u200B-\u200D\u2060\u00A0]/g,' ')   // ZWSP/NO-BREAK SPACE
+  .replace(/\s+/g,' ')                            // colapsa espacios
+  .trim();
+
+// Dado el valor crudo de 'respuesta' y las opciones, devuelve 'A'|'B'|'C'|'D' o null
+const normalizeRespuesta = (raw, opts)=>{
+  const R = clean(String(raw)).toUpperCase();
+  if(!R) return null;
+  // Formas típicas: "A", "a", "A)", "A.", "A:", "C )"
+  if(/^[ABCD]/.test(R)) return R[0];
+  // Números 1..4
+  if(/^[1-4]/.test(R)) return ['A','B','C','D'][parseInt(R[0],10)-1];
+  // Si viene el TEXTO de la opción
+  const map = {A:clean(opts?.A||''), B:clean(opts?.B||''), C:clean(opts?.C||''), D:clean(opts?.D||'')};
+  for(const k of ['A','B','C','D']){
+    if(map[k] && clean(R) === map[k].toUpperCase()) return k;
+  }
+  // Si contiene una letra suelta en la frase (p.ej. "Respuesta: c)")
+  const m = R.match(/\b[ABCD]\b/); if(m) return m[0];
+  // Patrón genérico con paréntesis o corchetes: "(C)"
+  const m2 = R.match(/[\(\[]?([ABCD])[\)\]]?/); if(m2) return m2[1];
+  return null;
+};
+
+// ===== CSV robusto =====
 function parseCSV(text){
   if (text && text.charCodeAt(0)===0xFEFF) text=text.slice(1);
   const rows=[]; let cur=''; let row=[]; let inQ=false;
@@ -18,6 +50,7 @@ function parseCSV(text){
   if(cur!==''||row.length){row.push(cur); rows.push(row);}
   return rows;
 }
+
 const shuffle = a=>{ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]] } return a; };
 const hash = arr => arr.map(q=>q.pregunta+q.respuesta).join('|').split('').reduce((a,c)=>((a<<5)-a)+c.charCodeAt(0),0);
 
@@ -26,38 +59,52 @@ let preguntas=[], idx=0, ans=[], nombre='—', incorrectas=[], quizHash=null, fl
 let cfg = { minutos:30, cantidad:0, sq:true, so:true };
 let rest=1800, timer=null, paused=false;
 
-// ===== Inicio =====
+// ===== Inicio (eventos básicos) =====
 const fileInput = $('#file-input');
-$('#btn-abrir').onclick = ()=>fileInput.click();
-$('#inicio-abrir').onclick = ()=>fileInput.click();
-$('#btn-plantilla').onclick = descargarPlantilla;
-$('#inicio-plantilla').onclick = descargarPlantilla;
-$('#btn-config').onclick = abrirConfig;
-$('#btn-ayuda').onclick = ()=>$('#dlg-ayuda').showModal();
-const _temaBtn = $('#btn-tema'); if(_temaBtn){ _temaBtn.remove(); }
+$('#btn-abrir')?.addEventListener('click', ()=>fileInput?.click());
+$('#inicio-abrir')?.addEventListener('click', ()=>fileInput?.click());
+$('#btn-plantilla')?.addEventListener('click', descargarPlantilla);
+$('#inicio-plantilla')?.addEventListener('click', descargarPlantilla);
+$('#btn-config')?.addEventListener('click', abrirConfig);
+$('#btn-ayuda')?.addEventListener('click', ()=>$('#dlg-ayuda')?.showModal());
 
-fileInput.addEventListener('change', async (e)=>{
+fileInput?.addEventListener('change', async (e)=>{
   const f = e.target.files[0]; if(!f) return;
   nombre = f.name;
   const rows = parseCSV(await f.text());
   if(!rows.length) return alert('CSV vacío');
-  const H = rows[0].map(h=>h.trim().toLowerCase());
+
+  // Encabezados
+  const H = rows[0].map(h=>clean(h).toLowerCase());
   const need = ['pregunta','opcion_a','opcion_b','opcion_c','opcion_d','respuesta'];
   if(!need.every(k=>H.includes(k))) return alert('Encabezados requeridos: '+need.join(', '));
   const I = k=>H.indexOf(k);
-  const out=[];
+
+  // Parseo con normalización de respuesta
+  const out=[]; let ambiguas=[];
   for(let i=1;i<rows.length;i++){
-    const r = rows[i]; if(!r || (r.length===1 && !r[0].trim())) continue;
+    const r = rows[i]; if(!r || (r.length===1 && !clean(r[0]))) continue;
+    const opciones = {A:clean(r[I('opcion_a')]), B:clean(r[I('opcion_b')]), C:clean(r[I('opcion_c')]), D:clean(r[I('opcion_d')])};
+    const rawResp = clean(r[I('respuesta')]);
+    const norm = normalizeRespuesta(rawResp, opciones);
+
     const q = {
-      pregunta: r[I('pregunta')]?.trim()||'',
-      opciones: {A:r[I('opcion_a')]||'', B:r[I('opcion_b')]||'', C:r[I('opcion_c')]||'', D:r[I('opcion_d')]||''},
-      respuesta: (r[I('respuesta')]||'').trim().toUpperCase(),
-      categoria: (I('categoria')>-1? r[I('categoria')]: 'General')?.trim()||'General',
-      explicacion: (I('explicacion')>-1? r[I('explicacion')]: '')?.trim()||''
+      pregunta: clean(r[I('pregunta')]) || '',
+      opciones,
+      respuesta: norm || 'A', // fallback seguro para no romper flujo
+      categoria: (I('categoria')>-1? clean(r[I('categoria')]) : 'General') || 'General',
+      explicacion: (I('explicacion')>-1? clean(r[I('explicacion')]) : '')
     };
+
+    if(!norm) ambiguas.push(i+1);
     if(q.pregunta) out.push(q);
   }
+
   if(!out.length) return alert('No se detectaron preguntas válidas');
+  if(ambiguas.length){
+    setTimeout(()=>alert(`Atención: ${ambiguas.length} fila(s) con respuesta ambigua (ej.: ${ambiguas.slice(0,8).join(', ')}${ambiguas.length>8?'…':''}).\nSe intentó normalizar, pero te conviene revisar el CSV.`), 40);
+  }
+
   preguntas = cfg.sq? shuffle(out) : out;
   if(cfg.cantidad>0) preguntas = preguntas.slice(0, cfg.cantidad);
   quizHash = hash(preguntas);
@@ -69,8 +116,8 @@ fileInput.addEventListener('change', async (e)=>{
 });
 
 function show(id){
-  ['#inicio','#examen','#resultado','#revision','#refuerzo','#estadisticas'].forEach(s=>$(s).classList.add('hidden'));
-  $(id).classList.remove('hidden');
+  ['#inicio','#examen','#resultado','#revision','#refuerzo','#estadisticas'].forEach(s=>$(s)?.classList.add('hidden'));
+  $(id)?.classList.remove('hidden');
 }
 
 function montarExamen(){
@@ -156,17 +203,19 @@ function renderNav(filter='t'){
     cont.appendChild(b);
   });
 }
-$('#filtro-t').onclick = ()=>renderNav('t');
-$('#filtro-p').onclick = ()=>renderNav('p');
-$('#filtro-m').onclick = ()=>renderNav('m');
+$('#filtro-t')?.addEventListener('click', ()=>renderNav('t'));
+$('#filtro-p')?.addEventListener('click', ()=>renderNav('p'));
+$('#filtro-m')?.addEventListener('click', ()=>renderNav('m'));
 
 // ===== Resultados =====
 function finalizar(){
   clearInterval(timer);
   let ok=0; incorrectas=[];
   preguntas.forEach((q,i)=>{
-    if(ans[i]===q.respuesta) ok++;
-    else incorrectas.push({...q, index:i, elegido:ans[i]||'-'});
+    // seguridad: por si alguna respuesta quedara sin normalizar (CSV raro)
+    const resp = ['A','B','C','D'].includes(q.respuesta) ? q.respuesta : (normalizeRespuesta(q.respuesta, q.opciones) || 'A');
+    if(ans[i]===resp) ok++;
+    else incorrectas.push({...q, index:i, elegido:ans[i]||'-', respuesta:resp});
   });
   const pct = (ok/preguntas.length)*100;
   $('#puntaje').textContent = `Puntaje: ${ok}/${preguntas.length} (${pct.toFixed(1)}%)`;
@@ -186,6 +235,7 @@ function finalizar(){
   show('#resultado');
   guardarLocal();
 }
+
 function gauge(id, pct, color){
   const c = document.getElementById(id), ctx=c.getContext('2d'); ctx.clearRect(0,0,c.width,c.height);
   const cx=110, cy=110, r=86;
@@ -194,16 +244,18 @@ function gauge(id, pct, color){
   ctx.strokeStyle=color; ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI*0.5,Math.PI*(0.5+2*(pct/100))); ctx.stroke();
   ctx.fillStyle=color; ctx.font='bold 22px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(pct.toFixed(1)+'%', cx, cy);
 }
+
 function mostrarRevision(mode){
   const list = $('#lista-revision'); list.innerHTML='';
   preguntas.forEach((q,i)=>{
-    const correcta = ans[i]===q.respuesta;
+    const resp = ['A','B','C','D'].includes(q.respuesta) ? q.respuesta : (normalizeRespuesta(q.respuesta, q.opciones) || 'A');
+    const correcta = ans[i]===resp;
     if(mode==='w' && correcta) return;
     const card = document.createElement('div'); card.className='card';
     card.innerHTML = `<div class="muted" style="margin-bottom:6px">#${i+1} · <span class="badge">${q.categoria||'General'}</span></div>
       <div style="font-weight:800;margin-bottom:6px">${q.pregunta}</div>`;
     ['A','B','C','D'].forEach(k=>{
-      const ok = k===q.respuesta, marcado = ans[i]===k;
+      const ok = k===resp, marcado = ans[i]===k;
       const line = document.createElement('div'); line.style.margin='2px 0';
       line.textContent = `${ok?'✅':marcado?'✗':'•'} ${k}) ${q.opciones[k]}`;
       line.style.color = ok? 'var(--success)' : (marcado? 'var(--danger)':'inherit');
