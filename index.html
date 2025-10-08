@@ -2,140 +2,245 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Simulador de Examen de Anatomía – Web</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Simulador Médico v3</title>
+  <meta name="theme-color" content="#0A84FF">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="assets/icon-192.png">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div id="toast" class="toast hidden">Guardado</div>
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+  <header class="appbar" role="banner">
+    <div class="row align-center">
+      <div class="logo" aria-hidden="true">SP</div>
+      <h1 class="app-title">Simulador Médico v3</h1>
+      <span class="subtitle">rápido · claro · confiable</span>
+    </div>
+    <nav class="row">
+      <button id="btn-abrir" class="btn primary">📂 Abrir CSV</button>
+      <input id="file-input" type="file" accept=".csv" class="hidden"/>
+      <button id="btn-plantilla" class="btn">⬇️ Plantilla</button>
+      <button id="btn-config" class="btn">⚙️ Configurar</button>
+      <button id="btn-ayuda" class="btn">❓ Ayuda</button>
+      
+    </nav>
+  </header>
 
-  <main class="container">
-    <!-- PANTALLA INICIAL -->
-    <section id="pantalla-inicio" class="card">
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <main id="main" class="container" role="main">
+    <!-- Inicio -->
+    <section id="inicio" class="card">
       <div class="center">
-        <div style="font-size:64px">🧠</div>
-        <h1>Simulador de Examen</h1>
-        <p style="margin-top:-6px">Alessandro Cervantes</p>
-      </div>
-      <div class="center">
-        <p>Selecciona un archivo <strong>CSV</strong> con el siguiente formato:</p>
-        <p class="muted">pregunta, opcion_a, opcion_b, opcion_c, opcion_d, respuesta, categoria(opcional), explicacion(opcional)</p>
-        <input id="file-input" type="file" accept=".csv" class="btn"/>
+        <h2>Bienvenido, Alessandro</h2>
+        <p class="muted">Carga tu banco de preguntas en formato CSV o descarga la plantilla para comenzar.</p>
+        <pre class="code">pregunta,opcion_a,opcion_b,opcion_c,opcion_d,respuesta,categoria,explicacion</pre>
+        <div class="row center" style="justify-content:center">
+          <button id="inicio-abrir" class="btn primary">Elegir CSV</button>
+          <button id="inicio-plantilla" class="btn">Descargar plantilla</button>
+        </div>
       </div>
     </section>
 
-    <!-- EXAMEN -->
-    <section id="pantalla-examen" class="card hidden">
-      <div class="row" style="justify-content:space-between;align-items:center">
-        <h2 style="color:var(--primario)">Quien me manda a estudiar esto...</h2>
-        <div class="row" style="align-items:center;gap:10px">
-          <span class="badge" id="archivo-nombre">CSV</span>
-          <span>⏱</span><span id="timer" class="timer">30:00</span>
-          <button id="btn-cambiar-archivo" class="btn">Cambiar archivo</button>
+    <!-- Examen -->
+    <section id="examen" class="card hidden">
+      <div class="row space-between align-center">
+        <div class="row align-center">
+          <h2 style="margin-right:8px">Examen en curso</h2>
+          <span id="archivo-nombre" class="badge">—</span>
+        </div>
+        <div class="row align-center">
+          <span class="muted">Tiempo</span>
+          <span id="timer" class="timer">30:00</span>
+          <button id="btn-pausa" class="btn sm">⏸ Pausa</button>
+          <button id="btn-cambiar-archivo" class="btn sm">Cambiar CSV</button>
         </div>
       </div>
-      <div style="margin:8px 0 6px" class="row"><span id="progreso-texto">Pregunta 1 de 1</span></div>
-      <div class="progress" aria-label="Progreso"><div id="progreso-bar"></div></div>
 
-      <div class="question" style="margin:18px 0">
-        <div class="muted" style="margin-bottom:8px">Pregunta:</div>
-        <div id="texto-pregunta" style="font-size:18px;font-weight:700"></div>
+      <div class="row wrap gap-8" style="margin:8px 0">
+        <span id="progreso-texto">Pregunta 1 de 1</span>
+        <span id="tag-categoria" class="badge">General</span>
+        <span id="tag-flag" class="badge">Sin marcar</span>
       </div>
+      <div class="progress"><div id="progreso-bar"></div></div>
 
-      <div id="opciones" class="grid" style="margin:18px 0"></div>
+      <div class="grid grid-exam">
+        <aside class="panel">
+          <div class="row space-between align-center">
+            <strong>Navegación</strong>
+            <div class="row">
+              <button id="filtro-t" class="btn sm">Todas</button>
+              <button id="filtro-p" class="btn sm">Pend.</button>
+              <button id="filtro-m" class="btn sm">Marcadas</button>
+            </div>
+          </div>
+          <div id="nav" class="grid grid-nav" role="listbox"></div>
+        </aside>
 
-      <div class="row" style="justify-content:space-between;margin-top:10px">
-        <div class="row">
-          <button id="btn-anterior" class="btn" disabled>Anterior</button>
-          <button id="btn-siguiente" class="btn" disabled>Siguiente</button>
-        </div>
-        <div class="row">
-          <button id="btn-guardar" class="btn">Guardar</button>
-          <button id="btn-finalizar" class="btn danger">Finalizar examen</button>
-        </div>
+        <article class="exam">
+          <div class="question">
+            <div class="row space-between align-center">
+              <div class="muted">Pregunta</div>
+              <div class="row">
+                <button id="btn-flag" class="btn sm">🚩 Marcar</button>
+                <button id="btn-nota" class="btn sm">📝 Nota</button>
+              </div>
+            </div>
+            <div id="q-text" class="pregunta"></div>
+          </div>
+
+          <div id="opciones" class="grid opciones"></div>
+
+          <div class="row space-between" style="margin-top:10px">
+            <div class="row">
+              <button id="btn-prev" class="btn" disabled>Anterior</button>
+              <button id="btn-next" class="btn" disabled>Siguiente</button>
+            </div>
+            <div class="row">
+              <button id="btn-guardar" class="btn">Guardar</button>
+              <button id="btn-fin" class="btn danger">Finalizar</button>
+            </div>
+          </div>
+          <p class="muted">Atajos: A–D elegir · ←/→ moverse · F marcar · P pausa</p>
+        </article>
       </div>
-      <p class="muted" style="margin-top:8px">Atajos: <span class="kbd">←</span>/<span class="kbd">→</span> navegar · <span class="kbd">A</span>/<span class="kbd">B</span>/<span class="kbd">C</span>/<span class="kbd">D</span> marcar · <span class="kbd">Enter</span> siguiente</p>
     </section>
 
-    <!-- RESULTADOS -->
-    <section id="pantalla-resultado" class="card hidden center">
-      <h2>📊 Resultados del Examen</h2>
-      <canvas id="gauge" class="chart" width="200" height="200" style="margin:10px auto 0"></canvas>
+    <!-- Resultados -->
+    <section id="resultado" class="card hidden center">
+      <h2>📊 Resultados</h2>
+      <canvas id="gauge" width="220" height="220" class="chart"></canvas>
       <h3 id="puntaje"></h3>
       <p id="feedback" class="muted"></p>
-      <div class="row center" style="justify-content:center;margin-top:12px">
+      <div class="row center" style="justify-content:center;margin-top:10px">
         <button id="btn-revisar" class="btn">Revisar respuestas</button>
         <button id="btn-refuerzo" class="btn warning hidden">Módulo de refuerzo</button>
-        <button id="btn-estadisticas" class="btn">Estadísticas</button>
-        <button id="btn-reiniciar" class="btn success">Intentar de nuevo</button>
+        <button id="btn-stats" class="btn">Estadísticas</button>
+        <button id="btn-errores" class="btn">⬇️ CSV de errores</button>
+        <button id="btn-reintentar" class="btn success">Intentar de nuevo</button>
       </div>
     </section>
 
-    <!-- REVISIÓN -->
-    <section id="pantalla-revision" class="card hidden">
-      <div class="row" style="justify-content:space-between;align-items:center">
-        <h2>Revisión de respuestas</h2>
-        <button class="btn" onclick="volverResultados()">Volver</button>
+    <!-- Revisión -->
+    <section id="revision" class="card hidden">
+      <div class="row space-between align-center">
+        <h2>Revisión</h2>
+        <div class="row">
+          <button id="rev-t" class="btn sm">Todas</button>
+          <button id="rev-w" class="btn sm">Solo incorrectas</button>
+          <button id="rev-volver" class="btn">Volver</button>
+        </div>
       </div>
-      <div id="lista-revision" class="grid" style="margin-top:12px"></div>
+      <div id="lista-revision" class="grid" style="margin-top:10px"></div>
     </section>
 
-    <!-- REFUERZO -->
-    <section id="pantalla-refuerzo" class="card hidden">
-      <div class="row" style="justify-content:space-between;align-items:center">
-        <h2>🧠 Módulo de refuerzo</h2>
-        <div class="badge" id="resumen-refuerzo">0 preguntas</div>
+    <!-- Refuerzo -->
+    <section id="refuerzo" class="card hidden">
+      <div class="row space-between align-center">
+        <h2>🧠 Refuerzo dirigido</h2>
+        <div id="resumen-ref" class="badge">0</div>
       </div>
 
-      <div class="grid grid-2" style="margin-top:16px">
+      <div class="grid grid-2" style="margin-top:12px">
         <div class="card">
-          <h3 style="margin-bottom:8px">🔍 Repaso inteligente</h3>
+          <h3>🔎 Filtrar</h3>
           <div class="row" style="gap:8px;margin:8px 0">
-            <input id="busqueda-refuerzo" placeholder="Buscar…" class="btn grow" oninput="filtrarRefuerzo()"/>
-            <select id="filtro-categoria" class="btn" onchange="filtrarRefuerzo()"></select>
+            <input id="buscar-ref" class="input grow" placeholder="Buscar texto…"/>
+            <select id="cat-ref" class="input"></select>
           </div>
-          <div id="lista-refuerzo" class="grid" style="max-height:380px;overflow:auto"></div>
+          <div id="lista-ref" class="grid" style="max-height:360px;overflow:auto"></div>
         </div>
         <div class="card center">
-          <h3 style="margin-bottom:8px">🎴 Flashcards</h3>
-          <div id="flashcard" class="question" style="height:240px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;cursor:pointer" onclick="voltearFlashcard()">—</div>
+          <h3>🎴 Flashcards</h3>
+          <div id="flash" class="question flash">—</div>
           <div class="row center" style="justify-content:center;margin:10px 0">
-            <button class="btn" onclick="anteriorFlash()">⬅️ Anterior</button>
-            <button class="btn" onclick="voltearFlashcard()">🔄 Voltear</button>
-            <button class="btn" onclick="siguienteFlash()">Siguiente ➡️</button>
+            <button id="fl-prev" class="btn">⬅️</button>
+            <button id="fl-vol" class="btn">🔄 Voltear</button>
+            <button id="fl-next" class="btn">➡️</button>
           </div>
           <div class="row center" style="justify-content:center">
-            <button class="btn success" onclick="valorarFlash(1)">😊 Fácil</button>
-            <button class="btn warning" onclick="valorarFlash(3)">😐 Normal</button>
-            <button class="btn danger" onclick="valorarFlash(5)">😰 Difícil</button>
+            <button class="btn success" data-score="1">😊 Fácil</button>
+            <button class="btn warning" data-score="3">😐 Normal</button>
+            <button class="btn danger"  data-score="5">😰 Difícil</button>
           </div>
-          <p id="stats-flash" class="muted" style="margin-top:8px"></p>
+          <p id="flash-stats" class="muted"></p>
         </div>
       </div>
+
       <div class="center" style="margin-top:10px">
-        <button class="btn" onclick="volverResultados()">Cerrar módulo</button>
+        <button id="ref-volver" class="btn">Cerrar</button>
       </div>
     </section>
 
-    <!-- ESTADÍSTICAS -->
-    <section id="pantalla-estadisticas" class="card hidden">
-      <div class="row" style="justify-content:space-between;align-items:center">
-        <h2>📈 Dashboard de estadísticas</h2>
-        <button class="btn" onclick="volverResultados()">Volver</button>
+    <!-- Estadísticas -->
+    <section id="estadisticas" class="card hidden">
+      <div class="row space-between align-center">
+        <h2>📈 Estadísticas</h2>
+        <div class="row">
+          <button id="exp-json" class="btn sm">⬆️ Exportar progreso</button>
+          <button id="imp-json" class="btn sm">⬇️ Importar progreso</button>
+          <input id="file-json" type="file" accept="application/json" class="hidden"/>
+          <button id="stats-volver" class="btn">Volver</button>
+        </div>
       </div>
-      <div class="grid grid-3" style="margin-top:12px">
-        <div class="card center"><div class="muted">Total preguntas</div><div id="stat-total" style="font-size:28px;font-weight:800"></div></div>
-        <div class="card center"><div class="muted">Correctas</div><div id="stat-correctas" style="font-size:28px;font-weight:800;color:var(--exito)"></div></div>
-        <div class="card center"><div class="muted">Incorrectas</div><div id="stat-incorrectas" style="font-size:28px;font-weight:800;color:var(--acento)"></div></div>
+
+      <div class="grid grid-3" style="margin-top:10px">
+        <div class="card center"><div class="muted">Total</div><div id="stat-t" class="stat"></div></div>
+        <div class="card center"><div class="muted">Correctas</div><div id="stat-c" class="stat ok"></div></div>
+        <div class="card center"><div class="muted">Incorrectas</div><div id="stat-i" class="stat bad"></div></div>
       </div>
+
       <div class="card" style="margin-top:12px">
         <h3>Rendimiento por categoría</h3>
-        <div id="stats-categorias" class="grid" style="margin-top:8px"></div>
+        <div id="stats-cat" class="grid"></div>
       </div>
     </section>
   </main>
 
+  <footer class="watermark">Alessandro Cervantes</footer>
+
+  <!-- Diálogos -->
+  <dialog id="dlg-config" class="modal">
+    <form method="dialog" class="modal-body">
+      <h3>Configuración</h3>
+      <label class="row space-between align-center"><span>Tiempo (min)</span><input id="cfg-min" type="number" min="5" max="180" step="5" class="input"></label>
+      <label class="row space-between align-center"><span>Nº preguntas (0=todas)</span><input id="cfg-n" type="number" min="0" step="5" class="input"></label>
+      <label class="row space-between align-center"><span>Barajar preguntas</span><input id="cfg-sq" type="checkbox"></label>
+      <label class="row space-between align-center"><span>Barajar opciones</span><input id="cfg-so" type="checkbox"></label>
+      <menu class="row space-between">
+        <button class="btn">Cancelar</button>
+        <button id="cfg-ok" class="btn success" value="default">Guardar</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-ayuda" class="modal">
+    <form method="dialog" class="modal-body">
+      <h3>Atajos</h3>
+      <ul>
+        <li>A–D: seleccionar opción</li>
+        <li>←/→ ó Enter: navegar</li>
+        <li>F: marcar/desmarcar</li>
+        <li>P: pausa/reanudar</li>
+      </ul>
+      <menu class="row end"><button class="btn">Entendido</button></menu>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-nota" class="modal">
+    <form method="dialog" class="modal-body">
+      <h3>Nota</h3>
+      <textarea id="nota-texto" class="textarea" rows="6" placeholder="Escribe tu mnemotecnia o referencia…"></textarea>
+      <menu class="row space-between">
+        <button class="btn">Cerrar</button>
+        <button id="nota-ok" class="btn success" value="default">Guardar</button>
+      </menu>
+    </form>
+  </dialog>
+
   <script src="js/app.js"></script>
-  <footer class="watermark">Alessandro Cervantes Dev.</footer>
+  <script>if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js'); }</script>
 </body>
 </html>
