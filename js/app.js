@@ -31,17 +31,23 @@ const clean = (s)=> (s ?? '')
   .trim();
 
 // Dado el valor crudo de 'respuesta' y las opciones, devuelve 'A'|'B'|'C'|'D' o null
+// Dado el valor crudo de 'respuesta' y las opciones, devuelve 'A'|'B'|'C'|'D' o null
 const normalizeRespuesta = (raw, opts)=>{
-  const R = clean(String(raw)).toUpperCase();
+  const rawStr = clean(String(raw));
+  const R = rawStr.toUpperCase();
   if(!R) return null;
 
-  // Formas típicas: "A", "a", "A)", "A.", "A:", "C )"
-  if(/^[ABCD]/.test(R)) return R[0];
+  // 1) Formas cortas tipo "A", "A)", "A.", "A:" (SOLO la letra + signo)
+  if(/^[ABCD]([\)\].:])?$/.test(R)) {
+    return R[0];
+  }
 
-  // Números 1..4
-  if(/^[1-4]/.test(R)) return ['A','B','C','D'][parseInt(R[0],10)-1];
+  // 2) Números 1–4, también solo el dígito con posible ) . :
+  if(/^[1-4]([\)\].:])?$/.test(R)) {
+    return ['A','B','C','D'][parseInt(R[0],10)-1];
+  }
 
-  // Si viene el TEXTO de la opción (ej. "Axilar")
+  // 3) TEXTO EXACTO de la opción (ej. "Axilar", "Nervio radial", etc.)
   const map = {
     A: clean(opts?.A || ''),
     B: clean(opts?.B || ''),
@@ -49,19 +55,22 @@ const normalizeRespuesta = (raw, opts)=>{
     D: clean(opts?.D || '')
   };
   for(const k of ['A','B','C','D']){
-    if(map[k] && clean(R) === map[k].toUpperCase()) return k;
+    if(map[k] && clean(map[k]).toUpperCase() === R) {
+      return k;
+    }
   }
 
-  // Si contiene una letra suelta en la frase (p.ej. "Respuesta: c)")
+  // 4) Buscar una letra suelta en frases tipo "Respuesta: c)"
   const m = R.match(/\b[ABCD]\b/);
   if(m) return m[0];
 
-  // Patrón genérico con paréntesis o corchetes: "(C)"
+  // 5) Patrones genéricos con paréntesis o corchetes "(C)", "[D]"
   const m2 = R.match(/[\(\[]?([ABCD])[\)\]]?/);
   if(m2) return m2[1];
 
   return null;
 };
+
 
 // ===== CSV robusto =====
 function parseCSV(text){
